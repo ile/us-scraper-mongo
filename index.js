@@ -6,26 +6,73 @@
  * (C) Ilkka Huotari
  */
 
-var jsdom = require("jsdom"),
+var cheerio = require("cheerio"),
 	fs = require("fs"),
 	mongo = require('mongoskin'),
-	jquery = fs.readFileSync("./jquery.js", "utf-8");
+	moment = require('moment'),
+	request = require('request'),
+	db = mongo.db("mongodb://localhost:27017/scraper", {native_parser:true});
+
+db.bind('posts');
 
 function usage() {
 	console.log('\nScrape usage');
 	console.log('\tnode index.js scrape <url>\n');
 }
 
-function output(data, i) {
-	i = i || 0;
-	var db = mongo.db("mongodb://localhost:27017/us-scraper", {native_parser:true}),
-		doc = data[i];
-	db.bind('posts');
+// get url contents (blog post)
+function getContents(url, i, links) {
 
-	if (doc) {
-		db.posts.insert(doc, function err(error, inserted) {
-			if (error) console.log(error);
-			output(data, i + 1);
+	function next() {
+		i = i + 1;
+		getContents(links[i], i, links);
+	}
+
+	function done(error, response, body) {
+		if (error) {
+			console.log(i+": "+error);
+
+			// try again
+			getContents(url, i, links);
+		}
+		else {
+			var $ = cheerio.load(body),
+				doc;
+
+			try {
+				doc = {
+					url: url,
+					body: $('#main-content > .node').html(),
+					comments: $('#comments').html(),
+					date: moment($('#main-content > .node > .submitted').html().trim()+' +03:00', 'DD.MM.YYYY HH:mm ZZ').toDate()
+				};
+			}
+			catch (e) {
+				console.log(e);
+
+				// try again
+				getContents(url, i, links);
+			}
+
+			db.posts.insert(doc, function err(error, inserted) {
+				if (error) {
+					console.log(error);
+				}
+				else next();
+			});
+		}
+	}
+
+	if (url) {
+		db.posts.findOne({ url: url }, function(err, document) {
+			if (!document) {
+				console.log('get contents (' + i + ') ' + url);
+				request(url, done);
+			}
+			else {
+				console.log('already exists: ' + url);
+				next();
+			}
 		});
 	}
 	else {
@@ -34,63 +81,50 @@ function output(data, i) {
 	}
 }
 
-function getContents(links, data, i) {
-	data = data || [];
-	i = i || 0;
-	var url = links[i];
-
-	function done(errors, window) {
-		var $ = window.$;
-
-		data.push({
-			url: url,
-			body: $('#main-content > .node').html(),
-			comments: $('#comments').html()
-		});
-
-		getContents(links, data, i + 1);
-	}
-
-	if (url) {
-		console.log('get contents ' + url);
-		jsdom.env({
-			url: url,
-			src: [ jquery ],
-			done: done
-		});
-	}
-	else {
-		console.log('Sending to Mongo... (' + data.length + ')');
-		output(data);
-	}
-}
-
-function getLinks(url, links) {
+// get links to blog posts
+function getLinks(baseUrl, url, links) {
+	links = links || [];
+	url = url || baseUrl;
 	console.log('get links '+url);
 
-	jsdom.env({
-		url: url,
-		src: [ jquery ],
-		done: function (errors, window) {
-			var $ = window.$;
+	function done(error, response, body) {
+		function get(i) {
+			return function() {
+				getContents(links[i], i + 1);
+			};
+		}
+
+		if (error) {
+			console.log(error);
+		}
+		else {
+			var $ = cheerio.load(body);
 
 			// scrape links from the page
 			var l = $("#main-content .view-content .teaser h2 a");
 
 			l.each(function(index) {
-				links.push(this.href);
+				links.push(absolute(baseUrl, this.attribs.href));
 			});
 
 			// scrape link to the next page
 			var next = $("#main-content .pager-next a").first();
 
-			if (next && next[0]) {
-				getLinks(next[0].href, links);
+			if (next && next.length) {
+				getLinks(baseUrl, absolute(baseUrl, next.attr('href')), links);
 			} else {
-				getContents(links.reverse());
+				console.log('getting contents (' + links.length + ')');
+				links = links.reverse();
+				getContents(links[0], 0, links);
 			}
 		}
-	});
+	}
+
+	request(url, done);
+}
+
+function absolute(base, relative) {
+    return relative.match(/^https?:/)? relative: base + relative;
 }
 
 (function main() {
@@ -102,6 +136,6 @@ function getLinks(url, links) {
 	}
 	
 	url = process.argv[2];
-	getLinks(url, []);
+	getLinks(url);
 }());
 
