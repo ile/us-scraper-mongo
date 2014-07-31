@@ -10,7 +10,7 @@ var cheerio = require("cheerio"),
 	mongo = require('mongoskin'),
 	moment = require('moment'),
 	request = require('request'),
-	db = mongo.db("mongodb://localhost:27017/scraper", {native_parser:true});
+	db = mongo.db("mongodb://localhost:27017/us-scraper", {native_parser:true});
 
 db.bind('posts');
 
