@@ -7,7 +7,6 @@
  */
 
 var cheerio = require("cheerio"),
-	fs = require("fs"),
 	mongo = require('mongoskin'),
 	moment = require('moment'),
 	request = require('request'),
