@@ -5,4 +5,4 @@ Uusi Suomi Scraper - raavi blogit mongodb:hen.
 
 ## usage
 
-node index.js scrape <url>
+node index.js url
