@@ -1,0 +1,16 @@
+{
+  "name": "us-scraper",
+  "version": "0.0.0",
+  "description": "Uusi Suomi Scraper",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "jsdom": "~0.10.1",
+    "mongoskin": "^1.4.4",
+    "sleep": "~1.1.3"
+  }
+}
